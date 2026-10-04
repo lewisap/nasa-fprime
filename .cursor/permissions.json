@@ -1,0 +1,16 @@
+{
+  "terminalAllowlist": [
+    "REPO_DIR=\"$(git rev-parse --show-toplevel)\" docker compose -f ~/projects/cursor-interview/dev-containers/fprime-test/docker-compose.yaml run --rm",
+    "REPO_DIR=\"$(git rev-parse --show-toplevel)\" docker compose -f ~/projects/cursor-interview/dev-containers/fprime-dev/docker-compose.yaml run --rm",
+    "docker compose -f ~/projects/cursor-interview/dev-containers/fprime-test/docker-compose.yaml run --rm",
+    "docker compose -f ~/projects/cursor-interview/dev-containers/fprime-dev/docker-compose.yaml run --rm",
+    "git rev-parse --show-toplevel",
+    "git status",
+    "git diff"
+  ],
+  "autoRun": {
+    "allow_instructions": [
+      "Running fprime-util generate, build or check through the docker compose files in ~/projects/cursor-interview/dev-containers is expected."
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+---
+description: Run fprime tooling only through the dev containers
+alwaysApply: true
+---
+Never run cmake, fprime-util, pip, python, g++, or the GDS on the host.
+If `fprime-util` is on PATH you are already inside the dev container (Cursor-hosted cloud agent): run it directly.
+Otherwise run fprime's own commands through the container, always passing this checkout. Type them exactly in this form; the terminal allowlist matches this text:
+  REPO_DIR="$(git rev-parse --show-toplevel)" docker compose -f ~/projects/cursor-interview/dev-containers/fprime-test/docker-compose.yaml run --rm fprime-test fprime-util generate --ut
+  REPO_DIR="$(git rev-parse --show-toplevel)" docker compose -f ~/projects/cursor-interview/dev-containers/fprime-test/docker-compose.yaml run --rm -w /fprime/Svc/<Component> fprime-test fprime-util check
+  (Non-UT builds: same pattern with dev-containers/fprime-dev/docker-compose.yaml and service fprime-dev.)
+Follow AGENTS.md for the fprime workflow itself. Never create a virtualenv or pip install on the host.
