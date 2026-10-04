@@ -1,0 +1,11 @@
+---
+description: AI disclosure and PR rules for fprime pull requests
+alwaysApply: true
+---
+When drafting or opening a pull request:
+- Use .github/pull_request_template.md.
+- In the row "Generative AI was used in this contribution (y/n)", answer `AI` instead of yes or no, as the template asks AI agents to.
+- Fill the "AI Usage" section: type of assistance, which files or functions, the tool (Cursor and the model), and whether the output was used as-is or modified (AI_POLICY.md, "What to Disclose").
+- Sign the bottom of the PR description with the text "IAMAI".
+- Keep the PR to one issue or change (CONTRIBUTING.md, "Keep Submissions Small").
+- Open PRs in lewisap/nasa-fprime with base demo-base, never against nasa/fprime.
