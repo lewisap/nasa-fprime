@@ -12,6 +12,8 @@
 
 #include "HealthTester.hpp"
 #include <Fw/Test/UnitTest.hpp>
+#include <STest/Pick/Pick.hpp>
+#include <limits>
 
 #define INSTANCE 0
 #define MAX_HISTORY_SIZE                                                                                         \
@@ -21,6 +23,8 @@
 #define FLAG_KEY_VALUE 0xcafecafe
 
 static_assert(Svc::HealthTester::getNumPingSendOutputPorts() < 0xcafecafe, "");
+static_assert(Svc::HealthTester::getNumPingSendOutputPorts() >= 3,
+              "rejectFatalBelowElapsedCycles needs at least two elapsed cycles below the smallest warning threshold");
 
 namespace Svc {
 
@@ -131,6 +135,49 @@ void HealthTester ::dispatchAll() {
         stat = this->component.doDispatch();
         FW_ASSERT(stat != HealthComponentBase::MSG_DISPATCH_ERROR);
     }
+}
+
+FwIndexType HealthTester ::pickEntry() const {
+    return static_cast<FwIndexType>(STest::Pick::startLength(0, static_cast<U32>(this->numPingEntries)));
+}
+
+void HealthTester ::runCycles(U32 cycles) {
+    this->clearHistory();
+    for (U32 i = 0; i < cycles; i++) {
+        this->invoke_to_Run(0, 0);
+    }
+}
+
+void HealthTester ::sendChngPing(FwIndexType entry, U32 warningValue, U32 fatalValue) {
+    this->clearHistory();
+    char name[80];
+    snprintf(name, sizeof(name), "task%d", entry);
+    this->sendCmd_HLTH_CHNG_PING(0, 0, Fw::CmdStringArg(name), warningValue, fatalValue);
+    this->dispatchAll();
+}
+
+void HealthTester ::assertChngPingRejected(FwIndexType entry, U32 warningValue, U32 fatalValue) {
+    char name[80];
+    snprintf(name, sizeof(name), "task%d", entry);
+    ASSERT_CMD_RESPONSE_SIZE(1);
+    ASSERT_CMD_RESPONSE(0, HealthComponentBase::OPCODE_HLTH_CHNG_PING, 0, Fw::CmdResponse::VALIDATION_ERROR);
+    ASSERT_EVENTS_SIZE(1);
+    ASSERT_EVENTS_HLTH_PING_INVALID_VALUES_SIZE(1);
+    ASSERT_EVENTS_HLTH_PING_INVALID_VALUES(0, name, warningValue, fatalValue);
+    ASSERT_EQ(this->pingEntries[entry].warnCycles, this->component.m_pingTrackerEntries[entry].entry.warnCycles);
+    ASSERT_EQ(this->pingEntries[entry].fatalCycles, this->component.m_pingTrackerEntries[entry].entry.fatalCycles);
+}
+
+void HealthTester ::assertChngPingAccepted(FwIndexType entry, U32 warningValue, U32 fatalValue) {
+    char name[80];
+    snprintf(name, sizeof(name), "task%d", entry);
+    ASSERT_CMD_RESPONSE_SIZE(1);
+    ASSERT_CMD_RESPONSE(0, HealthComponentBase::OPCODE_HLTH_CHNG_PING, 0, Fw::CmdResponse::OK);
+    ASSERT_EVENTS_SIZE(1);
+    ASSERT_EVENTS_HLTH_PING_UPDATED_SIZE(1);
+    ASSERT_EVENTS_HLTH_PING_UPDATED(0, name, warningValue, fatalValue);
+    ASSERT_EQ(warningValue, this->component.m_pingTrackerEntries[entry].entry.warnCycles);
+    ASSERT_EQ(fatalValue, this->component.m_pingTrackerEntries[entry].entry.fatalCycles);
 }
 
 // ----------------------------------------------------------------------
@@ -690,6 +737,68 @@ void HealthTester ::miscellaneous() {
     ASSERT_TLM_SIZE(1);
     ASSERT_TLM_PingLateWarnings_SIZE(1);
     ASSERT_TLM_PingLateWarnings(0, 1);
+}
+
+void HealthTester ::rejectZeroFatalThreshold() {
+    TEST_CASE(900.1.12, "Reject a FATAL threshold of zero");
+    REQUIREMENT("ISF-HTH-008");
+    COMMENT("A FATAL threshold of 0 is never reached by an outstanding ping, so it must not replace the current one.");
+
+    const FwIndexType entry = this->pickEntry();
+    this->sendChngPing(entry, 0, 0);
+    this->assertChngPingRejected(entry, 0, 0);
+
+    COMMENT("The configured FATAL threshold still fires for the entry.");
+    char name[80];
+    snprintf(name, sizeof(name), "task%d", entry);
+    // Entry n is configured to go FATAL one cycle after entry n - 1, so entry n is the n-th FATAL event
+    this->runCycles(static_cast<U32>(this->pingEntries[entry].fatalCycles) + 1);
+    ASSERT_EVENTS_HLTH_PING_LATE_SIZE(static_cast<FwSizeType>(entry) + 1);
+    ASSERT_EVENTS_HLTH_PING_LATE(entry, name);
+}
+
+void HealthTester ::rejectZeroWarningThreshold() {
+    TEST_CASE(900.1.13, "Reject a warning threshold of zero");
+    REQUIREMENT("ISF-HTH-008");
+    COMMENT("A warning threshold of 0 is never reached by an outstanding ping, so it must not replace the current one.");
+
+    const FwIndexType entry = this->pickEntry();
+    const U32 fatalValue = STest::Pick::lowerUpper(1, std::numeric_limits<U32>::max());
+    this->sendChngPing(entry, 0, fatalValue);
+    this->assertChngPingRejected(entry, 0, fatalValue);
+
+    COMMENT("The smallest reachable thresholds are accepted.");
+    this->sendChngPing(entry, 1, 1);
+    this->assertChngPingAccepted(entry, 1, 1);
+}
+
+void HealthTester ::rejectFatalBelowElapsedCycles() {
+    TEST_CASE(900.1.14, "Reject a FATAL threshold below the cycles an outstanding ping has already waited");
+    REQUIREMENT("ISF-HTH-008");
+    COMMENT("Lowering FATAL below the elapsed cycles of an outstanding ping would skip the FATAL for that ping.");
+
+    const FwIndexType entry = this->pickEntry();
+    // Stay below every configured warning threshold so the pings time out silently
+    const U32 elapsed =
+        STest::Pick::lowerUpper(2, static_cast<U32>(Svc::HealthComponentBase::NUM_PINGSEND_OUTPUT_PORTS) - 1);
+    this->runCycles(elapsed);
+    ASSERT_EVENTS_SIZE(0);
+    ASSERT_EQ(elapsed, this->component.m_pingTrackerEntries[entry].cycleCount);
+
+    const U32 fatalValue = STest::Pick::lowerUpper(1, elapsed - 1);
+    this->sendChngPing(entry, 1, fatalValue);
+    this->assertChngPingRejected(entry, 1, fatalValue);
+
+    COMMENT("A FATAL threshold equal to the elapsed cycles is still reached on the next cycle.");
+    this->sendChngPing(entry, 1, elapsed);
+    this->assertChngPingAccepted(entry, 1, elapsed);
+
+    char name[80];
+    snprintf(name, sizeof(name), "task%d", entry);
+    this->runCycles(1);
+    ASSERT_EVENTS_SIZE(1);
+    ASSERT_EVENTS_HLTH_PING_LATE_SIZE(1);
+    ASSERT_EVENTS_HLTH_PING_LATE(0, name);
 }
 
 void HealthTester::textLogIn(const FwEventIdType id,          //!< The event ID

@@ -194,6 +194,21 @@ void HealthImpl::HLTH_CHNG_PING_cmdHandler(const FwOpcodeType opCode,
         this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::VALIDATION_ERROR);
         return;
     }
+    FW_ASSERT(
+        entryIndex >= 0 && entryIndex < static_cast<FwIndexType>(FW_NUM_ARRAY_ELEMENTS(this->m_pingTrackerEntries)),
+        static_cast<FwAssertArgType>(entryIndex));
+
+    // Thresholds are matched for equality against the cycle count of an outstanding ping, which starts at 1 and
+    // only increases until the reply arrives. A threshold of 0, or a FATAL threshold below the cycles already
+    // elapsed, can never be matched and would silently disable that alarm for the entry.
+    if ((0 == warningValue) || (0 == fatalValue) ||
+        (fatalValue < this->m_pingTrackerEntries[entryIndex].cycleCount)) {
+        Fw::LogStringArg arg;
+        arg = entry;
+        this->log_WARNING_HI_HLTH_PING_INVALID_VALUES(arg, warningValue, fatalValue);
+        this->cmdResponse_out(opCode, cmdSeq, Fw::CmdResponse::VALIDATION_ERROR);
+        return;
+    }
 
     this->m_pingTrackerEntries[entryIndex].entry.warnCycles = warningValue;
     this->m_pingTrackerEntries[entryIndex].entry.fatalCycles = fatalValue;

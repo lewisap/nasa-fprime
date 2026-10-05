@@ -48,6 +48,9 @@ class HealthTester : public HealthGTestBase {
     void nominalCmd();
     void nominal2CmdsDuringTlm();
     void miscellaneous();
+    void rejectZeroFatalThreshold();
+    void rejectZeroWarningThreshold();
+    void rejectFatalBelowElapsedCycles();
 
   private:
     // ----------------------------------------------------------------------
@@ -80,6 +83,21 @@ class HealthTester : public HealthGTestBase {
     void initComponents();
 
     void dispatchAll();
+
+    //! Pick a random ping table entry
+    FwIndexType pickEntry() const;
+
+    //! Invoke the Run port a number of times without answering any ping
+    void runCycles(U32 cycles);
+
+    //! Send HLTH_CHNG_PING for an entry and dispatch it
+    void sendChngPing(FwIndexType entry, U32 warningValue, U32 fatalValue);
+
+    //! Assert HLTH_CHNG_PING was rejected and the entry kept its configured thresholds
+    void assertChngPingRejected(FwIndexType entry, U32 warningValue, U32 fatalValue);
+
+    //! Assert HLTH_CHNG_PING was accepted and the entry now holds the new thresholds
+    void assertChngPingAccepted(FwIndexType entry, U32 warningValue, U32 fatalValue);
 
   private:
     // ----------------------------------------------------------------------
