@@ -24,6 +24,8 @@ register_fprime_ut(
   SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/test/ut/HealthTester.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/test/ut/HealthTestMain.cpp"
+  DEPENDS
+    STest
 )
 set (UT_TARGET_NAME "${FPRIME_CURRENT_MODULE}_ut_exe")
 if (TARGET "${UT_TARGET_NAME}")

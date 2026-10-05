@@ -17,6 +17,7 @@ HTH-004 | The `Svc::Health` component shall have a command to enable or disable 
 HTH-005 | The `Svc::Health` component shall have a command to enable or disable monitoring for a particular port. | Unit Test
 HTH-006 | The `Svc::Health` component shall have a command to update ping timeout values for a port | Unit Test
 HTH-007 | The `Svc::Health` component shall stroke a watchdog port while all ping replies are within their limit and health checks pass | Unit Test
+HTH-008 | The `Svc::Health` component shall reject a ping timeout update with a warning or FATAL threshold of zero, or with a FATAL threshold below the cycles an outstanding ping has already waited | Unit Test
 
 ## 3. Design
 
@@ -44,6 +45,8 @@ Port Data Type | Name | Direction | Kind | Usage
 #### 3.2.1 Pings
 
 The `Svc::Health` component monitors health by iterating through a table of port numbers and their maximum allowed timeout. The timeout is specified as the number of calls to the `SchedIn` port. The actual timeout value in wall time will be dependent on the rate at which the port is called. During each `SchedIn` port call, all the `PingSend` ports are called with a key. The key is simply a counter value maintained as a private data member. An active component with a `Svc::Ping` port is required to execute the port handler on the thread of the component. When the handler is invoked, it returns the value of the `Svc::Ping` port key argument as the argument to the output `Svc::Ping` port. When the health component receives the return port invocation on the `PingReturn` port, it sets a status in the tracking table indicating the response was received. In addition to dispatching pings to components, the `SchedIn` port call checks the status of all the dispatched pings to verify that they have not exceeded the specified timeout. If there is a call that is outstanding but has not timed out, a counter is decremented. The port is not pinged while there is an outstanding ping call. If an active component times out responding to a ping, the `Svc::Health` component sends a FATAL event. The component has commands to completely turn off monitoring, turn off monitoring for a specific port, or update the timeout values. The updated timeout values or monitoring updates are not stored through a software reset.
+
+The `HLTH_CHNG_PING` command responds `VALIDATION_ERROR` and emits `HLTH_PING_INVALID_VALUES` without changing the entry when the warning threshold exceeds the FATAL threshold, when either threshold is zero, or when the FATAL threshold is below the number of cycles the entry's outstanding ping has already waited. A threshold is reached when the outstanding ping's cycle count equals it; that count starts at one and only grows until the reply arrives, so those values would never be reached and would silently disable the alarm. A warning threshold equal to the FATAL threshold remains legal; the FATAL takes precedence.
 
 ### 3.3 Scenarios
 
@@ -134,6 +137,12 @@ This test is similar to `6.1.8`, but it includes a nominal running of the SchedI
 ### 6.1.10 Miscellaneous 
 
 This set of test cases verifies the remaining off-nominal error cases. Each test case is simulated and validated individually.
+
+### 6.1.11 Unreachable Ping Thresholds
+
+These tests send `HLTH_CHNG_PING` values that could never be reached and verify the command is rejected with `HLTH_PING_INVALID_VALUES` while the entry keeps its configured thresholds: a FATAL threshold of zero (the configured FATAL still fires afterwards), a warning threshold of zero (warning and FATAL thresholds of one are then accepted), and a FATAL threshold below the cycles an outstanding ping has already waited (a FATAL threshold equal to those cycles is then accepted and fires on the next cycle).
+
+Requirement verified: `HTH-008`
 
 ## 6.2 Unit Test Coverage
 

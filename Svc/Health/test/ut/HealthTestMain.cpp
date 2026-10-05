@@ -3,6 +3,7 @@
 // ----------------------------------------------------------------------
 
 #include "HealthTester.hpp"
+#include "STest/Random/Random.hpp"
 
 TEST(Test, NominalTlm) {
     Svc::HealthTester tester;
@@ -59,7 +60,23 @@ TEST(Test, Miscellaneous) {
     tester.miscellaneous();
 }
 
+TEST(Test, RejectZeroFatalThreshold) {
+    Svc::HealthTester tester;
+    tester.rejectZeroFatalThreshold();
+}
+
+TEST(Test, RejectZeroWarningThreshold) {
+    Svc::HealthTester tester;
+    tester.rejectZeroWarningThreshold();
+}
+
+TEST(Test, RejectFatalBelowElapsedCycles) {
+    Svc::HealthTester tester;
+    tester.rejectFatalBelowElapsedCycles();
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
+    STest::Random::seed();
     return RUN_ALL_TESTS();
 }
